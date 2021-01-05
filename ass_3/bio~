@@ -1,0 +1,187 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... get Name's biography/filmography
+import re
+import sys
+import psycopg2
+#from helpers import whatever, functions, you, need
+
+# define any local helper functions here
+
+# set up some globals
+
+usage = "Usage: bio 'NamePattern' [Year]"
+db = None
+
+# process command-line args
+
+argc = len(sys.argv)
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=imdb")
+  curr_1 = db.cursor()
+  curr_2 = db.cursor()
+  curr_3 = db.cursor()
+  curr_4 = db.cursor()
+  curr_5 = db.cursor()
+  curr_6 = db.cursor()
+  query_1 = 'select name, birth_year, death_year, id from Names order by name, id'
+  query_2 = 'select movie_id from Principals where name_id = %s'
+  query_3 = 'select title, start_year from Movies where id = %s'
+  query_4 = 'select played from Acting_Roles where movie_id = %s and name_id = %s'
+  query_5 = 'select role from Crew_roles where movie_id = %s and name_id = %s'
+  query_6 = 'select id from movies Order by start_year ASC, title' 
+  # checks some basic stuff like correct variable type and number of variables.
+  if argc == 1:
+      print("Usage: bio 'NamePattern' [Year]")
+      sys.exit()
+  if argc == 3:
+      try: 
+          val = int(sys.argv[2])
+      except ValueError:  
+          print("Usage: bio 'NamePattern' [Year]")
+          sys.exit()
+  if argc > 3:
+      print("Usage: bio 'NamePattern' [Year]")
+      sys.exit()
+  search = sys.argv[1]
+  count = 0
+  name_info = {
+      'name': [],
+      'birth_year': [],
+      'death_year': [],
+      'id': []
+  }
+  movie_info = {
+      'id': [],
+      'title': [],
+      'start' : []
+  }
+  participation = {
+      'play': [],
+      'role': []
+  }
+  # simply going thru basic information in names and if their names meet our requirements we add it to our name_info dictionary.
+  curr_1.execute(query_1)
+  for tuple in curr_1.fetchall():
+      name, birth, death, name_id = tuple
+      if re.search(search.lower(), name.lower()) and argc == 2:
+          name_info['name'].append(name)
+          name_info['birth_year'].append(birth)
+          name_info['death_year'].append(death)
+          name_info['id'].append(name_id)
+          count += 1
+      elif re.search(search.lower(), name.lower()) and argc == 3:
+          if int(birth) == int(sys.argv[2]):
+              name_info['name'].append(name)
+              name_info['birth_year'].append(birth)
+              name_info['death_year'].append(death)
+              name_info['id'].append(name_id)
+              count += 1
+  # if statements for formatting reasons.
+  if count == 0 and argc == 2:
+      print("No name matching '" + str(search) + "'")
+  if count == 0 and argc == 3:
+      print("No name matching '" + str(search) + "'", sys.argv[2])
+  # if theres multiple matches we just print out the information in our dictionary in the correct format.
+  if count > 1:
+      increment_counter = 0
+      if argc == 2:
+          print("Names matching" ,"'" + str(search) + "'")
+      if argc == 3:
+          print("Names matching" ,"'" + str(search) + "'", sys.argv[2])
+      print("===============")
+      # bunch of if statements for formatting reasons.
+      while int(increment_counter) < int(count):
+          if str(name_info['birth_year'][increment_counter]) != 'None' and str(name_info['death_year'][increment_counter]) != 'None':
+              print(str(name_info['name'][increment_counter]), "(" + str(name_info['birth_year'][increment_counter]) + '-' 
+              + str(name_info['death_year'][increment_counter])  + ")")
+          elif str(name_info['birth_year'][increment_counter]) != 'None' and str(name_info['death_year'][increment_counter]) == 'None':
+              print(str(name_info['name'][increment_counter]), "(" + str(name_info['birth_year'][increment_counter]) + '-' 
+              + ")")
+          elif str(name_info['birth_year'][increment_counter]) == 'None' and str(name_info['death_year'][increment_counter]) != 'None':
+              print(str(name_info['name'][increment_counter]), "(" + '-' 
+              + str(name_info['death_year'][increment_counter])  + ")")
+          elif str(name_info['birth_year'][increment_counter]) == 'None' and str(name_info['death_year'][increment_counter]) == 'None':
+              print(str(name_info['name'][increment_counter]), "(" + '???' + ")")    
+          increment_counter += 1
+  # once again theres probably much more efficient/simple ways. I apologize for the confusion but please try to follow.
+  if count == 1:
+      print('Filmography for ', end = '')
+      # bunch of if statements for format reasons regarding wether death/birth is known.
+      if str(name_info['birth_year'][0]) != 'None' and str(name_info['death_year'][0]) != 'None':
+          print(str(name_info['name'][0]), "(" + str(name_info['birth_year'][0]) + '-' 
+          + str(name_info['death_year'][0])  + ")")
+      elif str(name_info['birth_year'][0]) != 'None' and str(name_info['death_year'][0]) == 'None':
+          print(str(name_info['name'][0]), "(" + str(name_info['birth_year'][0]) + '-' 
+          + ")")
+      elif str(name_info['birth_year'][0]) == 'None' and str(name_info['death_year'][0]) != 'None':
+          print(str(name_info['name'][0]), "(" + '-' 
+          + str(name_info['death_year'][0])  + ")")
+      elif str(name_info['birth_year'][0]) == 'None' and str(name_info['death_year'][0]) == 'None':
+          print(str(name_info['name'][0]), "(" + '???' + ")")
+      print("===============")
+      # select the movie ids from movies which the person has been involved with and put it in a list.  
+      curr_2.execute(query_2, [name_info['id'][0]])
+      m_id_list = []
+      for tuple in curr_2.fetchall():
+          movie_id = tuple
+          m_id_list.append(movie_id)
+      # now we select the movie ids in the order we want them namely release date then name.
+      curr_6.execute(query_6)
+      for tuple in curr_6.fetchall():
+          movie_id = tuple
+          # we add it to our dictionary if its in our list of movie ids , the difference being now its in correct order.
+          if movie_id in m_id_list: 
+              movie_info['id'].append(movie_id)
+      # we go thru the various movie ids the person has participated in and grab their release date and title and add it to our dictionary.
+      for m_id in movie_info['id']:
+          # this query simply selects the movie we want given the movie id.
+          curr_3.execute(query_3 , [m_id])
+          for tuple in curr_3.fetchall():
+              title, start = tuple
+              movie_info['title'].append(title)
+              movie_info['start'].append(start)
+      # with both the movie_id and their name_id we can find their roles for both acting and crew roles.
+      # we therefore can add dictionaries containing the correct movie_id and what they participated in to 
+      # the appropiate list.
+      
+      # for acting
+      for m_id in movie_info['id']:
+          curr_4.execute(query_4, [m_id, name_info['id'][0]])
+          for tuple in curr_4.fetchall():
+              played = tuple
+              participation['play'].append({
+                  'movie_id': m_id,
+                  'played': played
+              })
+      # for crew
+      for m_id in movie_info['id']:
+          curr_5.execute(query_5, [m_id, name_info['id'][0]])
+          for tuple in curr_5.fetchall():
+              role = tuple
+              participation['role'].append({
+                  'movie_id': m_id,
+                  'role': role
+              })
+      counter = 0
+      # now that our dictionary has everything we want we just print it out in the correct format and we are done.
+      for m_id in movie_info['id']:
+          print(movie_info['title'][counter], '(' + str(movie_info['start'][counter]) + ')' )
+          for act in participation['play']:
+              if act['movie_id'] == m_id:
+                  print(' playing', act['played'][0])
+          for job in participation['role']:
+              if job['movie_id'] == m_id:
+                  print(' as', job['role'][0].capitalize().replace('_', ' '))
+          counter += 1   
+      
+
+      
+except psycopg2.Error as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+

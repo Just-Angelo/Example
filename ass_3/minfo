@@ -1,0 +1,181 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... print info about cast and crew for Movie
+
+import sys
+import psycopg2
+import re
+#from helpers import whatever, functions, you, need
+
+# define any local helper functions here
+
+# set up some globals
+
+usage = "Usage: minfo 'MovieTitlePattern' [Year]"
+db = None
+
+# process command-line args
+
+argc = len(sys.argv)
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=imdb")
+  curr = db.cursor()
+  curr_2 = db.cursor()
+  curr_3 = db.cursor()
+  curr_4 = db.cursor()
+  curr_5 = db.cursor()
+  query = "select movies.id, movies.title, start_year from movies Order by start_year ASC, movies.title"
+  query2 = 'select a.name_id, a.played from Acting_Roles a where a.movie_id = %s'
+  query3 = 'select name, id from Names'
+  query4 = 'select name_id from Principals where movie_id = %s'
+  query5 = 'select name_id , role from Crew_roles where movie_id = %s'
+  # too less arguments
+  if argc == 1:
+      print("Usage: minfo 'MovieTitlePattern' [Year]")
+      sys.exit()
+  # if user gives 2 arguments and the secvond isn't an int
+  if argc == 3:
+      try: 
+          val = int(sys.argv[2])
+      except ValueError:  
+          print("Usage: minfo 'MovieTitlePattern' [Year]")
+          sys.exit()
+  # too many arguments
+  if argc > 3:
+      print("Usage: minfo 'MovieTitlePattern' [Year]")
+      sys.exit()
+  curr.execute(query)
+  count = 0
+  movie_info = {
+      'title': [],
+      'id': [],
+      'year': []
+  }
+  actor_info = {
+      'id': [],
+      'name': [],
+      'role': []
+  }
+  crew_info = {
+      'id': [],
+      'name': [],
+      'job': []
+  }
+  a_id_list = []
+  c_id_list = []
+  search = sys.argv[1]
+  # we select the movies id title and release date ordered by starting yr then title.  
+  for tuple in curr.fetchall():
+      # simply adding the list of movies that meet our criterea into the dictionary.
+      movie_id, title, start = tuple
+      if re.search(search.lower(), title.lower()) and argc == 2:
+          movie_info['title'].append(title)
+          movie_info['id'].append(movie_id)
+          movie_info['year'].append(start)
+          count += 1
+      elif re.search(search.lower(), title.lower()) and argc == 3:
+          if int(start) == int(sys.argv[2]):
+              movie_info['title'].append(title)
+              movie_info['id'].append(movie_id)
+              movie_info['year'].append(start)
+              count += 1
+  # two if statements just for formatting reasons when movies found is zero.
+  if count == 0 and argc == 2:
+      print("No movie matching '" + str(search) + "'")
+  if count == 0 and argc == 3:
+      print("No movie matching '" + str(search) + "'", sys.argv[2])
+  # if theres more than 1 movie we simply print out our dictionary which has the information and adjut a bit for format.
+  if int(count) > 1:
+      increment_counter = 0
+      if argc == 2:
+          print("Movies matching" ,"'" + str(search) + "'")
+      if argc == 3:
+          print("Movies matching" ,"'" + str(search) + "'", sys.argv[2])
+      print("===============")
+      while int(increment_counter) < int(count):
+          print(str(movie_info['title'][increment_counter]), "(" + str(movie_info['year'][increment_counter]) + ")")
+          increment_counter += 1
+  # For the following I'm sure theres a less complicated method which is more efficient. I apologize for this please try to follow along.
+  if count == 1:
+      print(movie_info['title'][0], '(' + str(movie_info['year'][0]) + ')')
+      print('===============')
+      print('Starring')
+      # we select the name and role played of actors given our particular movie_id.
+      curr_2.execute(query2, [movie_info['id'][0]])
+      for tuple in curr_2.fetchall():
+          # we collect all the ids of the actors in this movie and put it in a list.
+          actor_id, role = tuple
+          a_id_list.append(actor_id)
+      # we select the name and role of crew members in the given movie id and do a similar thing.
+      curr_5.execute(query5, [movie_info['id'][0]])
+      for tuple in curr_5.fetchall():
+          # collect the ids of the crew and put them in a list.
+          crew_id, role = tuple
+          c_id_list.append(crew_id)
+      # selects all the name ids in principal which is by default ordered by ordering.
+      curr_4.execute(query4, [movie_info['id'][0]])
+      for tuple in curr_4.fetchall():
+          # by going in the correct order given by the query and picking ids that exist in our previous two lists we can
+          # add these ids to our dictionaries with the correct order.
+          name_id = tuple
+          for ids in a_id_list:
+              if ids in name_id:
+                  actor_info['id'].append(name_id)
+          for c_id in c_id_list:
+              if c_id in name_id:
+                  crew_info['id'].append(name_id)
+      # the point of this list is so we don't capture actors which perform multiple postions e.g( suppose actor A has role A and role B
+      # we want the role list to capture role A and role B([A,B]) but since our id list has them twice we dont want our role list to be [A,B,A,B]).
+      # A flaw in this logic is that it assume given the actor is the same person their own name will be adjacent to their other role.
+      anti_repeat_a = []
+      # here we just run the query which finds ids and roles for our given movie_id and find the roles for each of our actors in our actor_info dict. 
+      for act_id in actor_info['id']:
+          curr_2.execute(query2, [movie_info['id'][0]])
+          if act_id not in anti_repeat_a:
+              for tuple in curr_2.fetchall():
+                  actor_id, role = tuple
+                  if actor_id in act_id:
+                      actor_info['role'].append(role)
+                      anti_repeat_a.append(act_id)
+      # similarly we go thru the ids and select the name id and names from names and add their corresponding names to the dictionary.
+      for actor_id in actor_info['id']:
+          curr_3.execute(query3)
+          for tuple in curr_3.fetchall():
+              name, name_id = tuple
+              if name_id in actor_id:
+                  actor_info['name'].append(name)
+      # I'm not going to type an explanation for this cause its virtually the same code and logic as discussed for actors.
+      for crew_id in crew_info['id']:
+          curr_3.execute(query3)
+          for tuple in curr_3.fetchall():
+              name, name_id = tuple
+              if name_id in crew_id:
+                  crew_info['name'].append(name)
+      anti_repeat_c = []
+      for crew_id in crew_info['id']:
+          curr_5.execute(query5, [movie_info['id'][0]])
+          if crew_id not in anti_repeat_c:
+              for tuple in curr_5.fetchall():
+                  c_id, role = tuple
+                  if c_id in crew_id:
+                      crew_info['job'].append(role)
+                      anti_repeat_c.append(crew_id)
+      increment_counter = 0
+      # Now that our dictionary has everything we need we just print it out in the appropiate format.
+      while increment_counter < len(actor_info['id']):
+          print(' ' + actor_info['name'][increment_counter], 'as', actor_info['role'][increment_counter]) 
+          increment_counter += 1
+      print('and with')
+      increment_counter = 0
+      while increment_counter < len(crew_info['id']):
+          print(' ' + crew_info['name'][increment_counter] + ':', crew_info['job'][increment_counter].capitalize())
+          increment_counter += 1 
+
+except psycopg2.Error as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+

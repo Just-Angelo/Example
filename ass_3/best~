@@ -1,0 +1,59 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... print name, year, ratings of top N movies
+
+import sys
+import psycopg2
+#from helpers import whatever, functions, you, need
+
+# define any local helper functions here
+
+# set up some globals
+
+usage = "Usage: best [N]"
+db = None
+
+# process command-line args
+
+argc = len(sys.argv)
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=imdb")
+  curr = db.cursor()
+  query = "select rating, movies.title, start_year from movies Order by rating DESC, movies.title"
+  curr.execute(query)
+  count = 0
+  # we check that the argument is actually an int.
+  if argc > 1:
+      try: 
+          val = int(sys.argv[1])
+      except ValueError:    
+          print('Usage: best [N]')
+          sys.exit()
+  # if theres too many arguments or we also exit.
+  if argc > 2:
+      print('Usage: best [N]')
+      sys.exit()
+  # if the argument is less than 1 we also exit.
+  if argc == 2 and int(sys.argv[1]) < 1:
+      print('Usage: best [N]')  
+      sys.exit()
+  # here we choose the movies rating,title, release date and order them based on release date then title.
+  for tuple in curr.fetchall():
+      # if theres 2 arguments by the user then we list top N movies.
+      if argc == 2 and int(count) < int(sys.argv[1]):  
+          rating, main_title, start_year = tuple
+          print(str(rating) , main_title , "(" + str(start_year) + ")")
+      # otherwise we just assume top 10
+      if argc == 1 and int(count) < 10:
+         rating, main_title, start_year = tuple
+         print(str(rating) , main_title , "(" + str(start_year) + ")")
+      count += 1 
+  
+except psycopg2.Error as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+

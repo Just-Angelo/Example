@@ -1,0 +1,79 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... print info about different releases for Movie
+
+import sys
+import psycopg2
+import re
+#from helpers import whatever, functions, you, need
+
+# define any local helper functions here
+
+# set up some globals
+
+usage = "Usage: rels 'PartialMovieTitle'"
+db = None
+
+# process command-line args
+
+argc = len(sys.argv)
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=imdb")
+  curr = db.cursor()
+  curr_2 = db.cursor()
+  query = "select movies.id, movies.title, start_year from movies Order by start_year ASC, movies.title"
+  query_2 = "select Aliases.movie_id, Aliases.local_title, Aliases.region, Aliases.language from Aliases Order by Aliases.ordering ASC"
+  curr.execute(query)
+  curr_2.execute(query_2)
+  count = 0
+  # not correct amount of arguments
+  if argc != 2:
+      print("Usage: rels 'PartialMovieTitle'")
+      sys.exit()
+  movie_info = {
+      'title': [],
+      'id': [],
+      'year': []
+  }
+  search = sys.argv[1] 
+  # runs a query which selects movie_id , title , release date ordered by release date then title. 
+  for tuple in curr.fetchall():
+      movie_id, title, start = tuple
+      # if the regex partial name is in the movie title (case insensitive) we add it to our dictionary for later.
+      if re.search(search.lower(), title.lower()):
+          movie_info['title'].append(title)
+          movie_info['id'].append(movie_id)
+          movie_info['year'].append(start)
+          count += 1
+  # if we added 0 movies then theres just no matches.
+  if count == 0:
+      print("No movie matching '" + str(search) + "'")
+  # if theres more than 1 movie we just simply print the information in our dictionary which contains the matches and their information.
+  if int(count) > 1:
+      increment_counter = 0
+      print("Movies matching" ,"'" + str(search) + "'")
+      print("===============")
+      while int(increment_counter) < int(count):
+          print(str(movie_info['title'][increment_counter]), "(" + str(movie_info['year'][increment_counter]) + ")")
+          increment_counter += 1
+  # if theres only 1  movie we run a query which gives us the infortmation we need from alias given the movie id we have.
+  if int(count) == 1:
+      print(movie_info['title'][0], '(' + str(movie_info['year'][0]) + ')' , "was also released as")
+      for tuple in curr_2.fetchall():
+          movie_id, title, region, language = tuple
+          # now we can print what we want with a few if statements for formatting reasons.
+          if movie_id == movie_info['id'][0]:
+              print("'" + title + "'" , "(", end = "")
+              if region != None:
+                  print("region: " + region.strip(), end = "") 
+              if language != None:
+                  print(',', "language: " + language.strip() , end = "")
+              print(")")
+except psycopg2.Error as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+
